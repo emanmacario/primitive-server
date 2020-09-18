@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/emanmacario/primitive-server/primitive"
 	"github.com/gorilla/mux"
@@ -17,15 +17,15 @@ func main() {
 	r.HandleFunc("/", index).Methods(http.MethodGet)
 	r.HandleFunc("/upload", handleUpload).Methods(http.MethodPost)
 
-	fmt.Println("Server running on localhost:5000")
-	http.ListenAndServe(":5000", r)
+	log.Println("Server running on localhost:5000")
+	log.Fatal(http.ListenAndServe(":5000", r))
 
 	inFile, err := os.Open("tmp/lenny.jpeg")
 	if err != nil {
 		panic(err)
 	}
 	defer inFile.Close()
-	out, err := primitive.Transform(inFile, 1)
+	out, err := primitive.Transform(inFile, "jpeg", 1)
 	if err != nil {
 		panic(err)
 	}
@@ -48,34 +48,39 @@ func index(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUpload(w http.ResponseWriter, r *http.Request) {
-	// Parse input
-	r.ParseMultipartForm(20)
-
 	// Retrieve file
-	file, handler, err := r.FormFile("image")
+	file, header, err := r.FormFile("image")
 	if err != nil {
-		fmt.Println("Error retrieving the file")
-		log.Fatal(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
+	// Set Content-Type header based on file extension
+	ext := filepath.Ext(header.Filename)
+	switch ext {
+	case ".jpg":
+		fallthrough
+	case ".jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
+	default:
+		http.Error(w, "Invalid image type", http.StatusBadGateway)
+		return
+	}
+
 	// Print image file metadata
-	fmt.Printf("Uploaded file: %+v\n", handler.Filename)
-	fmt.Printf("File size: %+v\n", handler.Size)
-	fmt.Printf("MIME header: %+v\n", handler.Header)
+	log.Printf("Uploaded file: %+v\n", header.Filename)
+	log.Printf("File size: %+v\n", header.Size)
+	log.Printf("MIME header: %+v\n", header.Header)
+	log.Printf("Extension type: %s\n", ext)
 
-	// Write temporary file to server
-	tempFile, err := ioutil.TempFile("images", "upload-*.jpeg")
+	out, err := primitive.Transform(file, ext, 200)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	defer tempFile.Close()
 
-	fileBytes, err := ioutil.ReadAll(file)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tempFile.Write(fileBytes)
-	fmt.Fprintf(w, "Successfully uploaded image file\n")
+	io.Copy(w, out)
 }

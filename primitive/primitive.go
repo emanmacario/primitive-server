@@ -37,16 +37,16 @@ func WithMode(mode Mode) func() []string {
 
 // Transform will take the provided image and apply a primitive transformation
 // to it, then return a reader to the resulting image
-func Transform(image io.Reader, numShapes int, opts ...func() []string) (io.Reader, error) {
+func Transform(image io.Reader, ext string, numShapes int, opts ...func() []string) (io.Reader, error) {
 	// Create temporary input file
-	in, err := ioutil.TempFile("", "in_*.jpeg")
+	in, err := ioutil.TempFile("", fmt.Sprintf("in_*%s", ext))
 	if err != nil {
 		return nil, errors.New("primitive: failed to create temporary input file")
 	}
 	defer os.Remove(in.Name())
 
 	// Create temporary output file
-	out, err := ioutil.TempFile("", "out_*.jpeg")
+	out, err := ioutil.TempFile("", fmt.Sprintf("out_*%s", ext))
 	if err != nil {
 		return nil, errors.New("primitive: failed to create temporary output file")
 	}
@@ -65,7 +65,7 @@ func Transform(image io.Reader, numShapes int, opts ...func() []string) (io.Read
 	}
 	fmt.Println(stdCombo)
 
-	// Read out into a reader, return reader, delete out
+	// Read out into a reader, return reader, delete in and out
 	b := bytes.NewBuffer(nil)
 	_, err = io.Copy(b, out)
 	if err != nil {

@@ -66,7 +66,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	case ".png":
 		w.Header().Set("Content-Type", "image/png")
 	default:
-		http.Error(w, "Invalid image type", http.StatusBadGateway)
+		http.Error(w, "Invalid image type", http.StatusBadRequest)
 		return
 	}
 

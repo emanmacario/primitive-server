@@ -8,14 +8,19 @@ import (
 )
 
 func main() {
-	file, err := os.Open("tmp/lenny.jpeg")
+	inFile, err := os.Open("tmp/lenny.jpeg")
 	if err != nil {
 		panic(err)
 	}
-	defer file.Close()
-	out, err := primitive.Transform(file, 5)
+	defer inFile.Close()
+	out, err := primitive.Transform(inFile, 100)
 	if err != nil {
 		panic(err)
 	}
-	io.Copy(os.Stdout, out)
+	os.Remove("tmp/out.jpeg")
+	outFile, err := os.Create("tmp/out.jpeg")
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(outFile, out)
 }

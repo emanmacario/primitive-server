@@ -39,14 +39,14 @@ func WithMode(mode Mode) func() []string {
 // to it, then return a reader to the resulting image
 func Transform(image io.Reader, numShapes int, opts ...func() []string) (io.Reader, error) {
 	// Create temporary input file
-	in, err := ioutil.TempFile("", "in_*.")
+	in, err := ioutil.TempFile("", "in_*.jpeg")
 	if err != nil {
 		return nil, errors.New("primitive: failed to create temporary input file")
 	}
 	defer os.Remove(in.Name())
 
 	// Create temporary output file
-	out, err := ioutil.TempFile("", "out_")
+	out, err := ioutil.TempFile("", "out_*.jpeg")
 	if err != nil {
 		return nil, errors.New("primitive: failed to create temporary output file")
 	}

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/emanmacario/primitive-server/primitive"
 	"github.com/gorilla/mux"
@@ -40,7 +41,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUpload(w http.ResponseWriter, r *http.Request) {
-	// Retrieve file
+	// Retrieve image file from form
 	file, header, err := r.FormFile("image")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -48,42 +49,74 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Set Content-Type header based on file extension
+	// Parse and validate file extension
 	ext := filepath.Ext(header.Filename)
-	switch strings.ToLower(ext) {
-	case ".jpg":
-		fallthrough
-	case ".jpeg":
-		w.Header().Set("Content-Type", "image/jpeg")
-	case ".png":
-		w.Header().Set("Content-Type", "image/png")
-	default:
-		http.Error(w, "Invalid image type", http.StatusBadRequest)
+	extLower := strings.ToLower(ext)
+	if extLower != ".jpg" && extLower != ".jpeg" && extLower != ".png" {
+		http.Error(w, fmt.Sprintf("Unsupported filetype %s\n", extLower), http.StatusBadRequest)
 		return
 	}
 
-	// Print image file metadata
+	// Log uploaded image file metadata
 	log.Printf("Uploaded file: %+v\n", header.Filename)
 	log.Printf("File size: %+v\n", header.Size)
 	log.Printf("MIME header: %+v\n", header.Header)
 	log.Printf("Extension type: %s\n", ext)
 
-	out, err := primitive.Transform(file, ext, 500, primitive.WithMode(primitive.ModeCombo))
+	// Generate and return four different transformed images to the client
+	a, err := genImage(file, ext, 33, primitive.ModeCombo)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	file.Seek(0, 0)
+	b, err := genImage(file, ext, 33, primitive.ModeCircle)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	file.Seek(0, 0)
+	c, err := genImage(file, ext, 33, primitive.ModeTriangle)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	file.Seek(0, 0)
+	d, err := genImage(file, ext, 33, primitive.ModeRotatedRect)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	html := `<html><body>
+		{{range .}}.
+			<img src="/{{.}}">
+		{{end}}
+		</body></html>`
+	tmpl := template.Must(template.New("").Parse(html))
+	log.Println([]string{a, b, d, c})
+	err = tmpl.Execute(w, []string{a, b, c, d})
+	if err != nil {
+		log.Fatal(err.Error())
+		panic(err)
+	}
+}
+
+// Generates a primitive image and returns the image file name
+func genImage(r io.Reader, ext string, numShapes int, mode primitive.Mode) (string, error) {
+	out, err := primitive.Transform(r, ext, numShapes, primitive.WithMode(primitive.ModeCombo))
+	if err != nil {
+		return "", err
 	}
 
 	outFile, err := tempFile("", ext)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return "", err
 	}
 	defer outFile.Close()
 	io.Copy(outFile, out)
-	redirectURL := fmt.Sprintf("/%s", outFile.Name())
-	http.Redirect(w, r, redirectURL, http.StatusFound)
 
+	return outFile.Name(), nil
 }
 
 func tempFile(prefix, ext string) (*os.File, error) {

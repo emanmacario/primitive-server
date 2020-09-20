@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/emanmacario/primitive-server/primitive"
 	"github.com/gorilla/mux"
@@ -16,6 +19,11 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", index).Methods(http.MethodGet)
 	r.HandleFunc("/upload", handleUpload).Methods(http.MethodPost)
+
+	prefix := "/images/"
+	dir := http.Dir("./images/")
+	fs := http.FileServer(dir)
+	r.PathPrefix(prefix).Handler(http.StripPrefix(prefix, fs))
 
 	log.Println("Server running on localhost:5000")
 	log.Fatal(http.ListenAndServe(":5000", r))
@@ -58,7 +66,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	// Set Content-Type header based on file extension
 	ext := filepath.Ext(header.Filename)
-	switch ext {
+	switch strings.ToLower(ext) {
 	case ".jpg":
 		fallthrough
 	case ".jpeg":
@@ -76,11 +84,39 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	log.Printf("MIME header: %+v\n", header.Header)
 	log.Printf("Extension type: %s\n", ext)
 
-	out, err := primitive.Transform(file, ext, 200)
+	out, err := primitive.Transform(file, ext, 10)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	io.Copy(w, out)
+	outFile, err := tempFile("", ext)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer outFile.Close()
+	io.Copy(outFile, out)
+	redirectURL := fmt.Sprintf("/%s", outFile.Name())
+	http.Redirect(w, r, redirectURL, http.StatusFound)
+
+}
+
+func tempFile(prefix, ext string) (*os.File, error) {
+	// Create temporary file for transformed image
+	tmp, err := ioutil.TempFile("./images/", prefix)
+	if err != nil {
+		return nil, errors.New("main: failed to create temporary file")
+	}
+
+	// Defer temporary file deletion
+	defer func() {
+		err := os.Remove(tmp.Name())
+		if err != nil {
+			log.Println(err.Error())
+		}
+	}()
+
+	// Create a new file with temp file name and given extension
+	return os.Create(fmt.Sprintf("%s%s", tmp.Name(), ext))
 }

@@ -27,22 +27,6 @@ func main() {
 
 	log.Println("Server running on localhost:5000")
 	log.Fatal(http.ListenAndServe(":5000", r))
-
-	inFile, err := os.Open("tmp/lenny.jpeg")
-	if err != nil {
-		panic(err)
-	}
-	defer inFile.Close()
-	out, err := primitive.Transform(inFile, "jpeg", 1)
-	if err != nil {
-		panic(err)
-	}
-	os.Remove("tmp/out.jpeg")
-	outFile, err := os.Create("tmp/out.jpeg")
-	if err != nil {
-		panic(err)
-	}
-	io.Copy(outFile, out)
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +68,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	log.Printf("MIME header: %+v\n", header.Header)
 	log.Printf("Extension type: %s\n", ext)
 
-	out, err := primitive.Transform(file, ext, 10)
+	out, err := primitive.Transform(file, ext, 500, primitive.WithMode(primitive.ModeCombo))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
